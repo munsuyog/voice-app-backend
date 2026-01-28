@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     MAX_MESSAGES: int = 12
     LLM_MODEL: str = "gpt-4.1-mini"
     OPENAI_API_KEY: str
+    REDIS_PASS: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
