@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voice Chat</title>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #020617;
+      color: #e5e7eb;
+      max-width: 720px;
+      margin: auto;
+      padding: 40px;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+
+    #start {
+      background: #22c55e;
+      color: #000;
+    }
+
+    #stop {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 10px;
+      opacity: 0.85;
+    }
+
+    #transcript {
+      margin-top: 20px;
+      padding: 15px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      min-height: 90px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎙️ Voice Chat</h1>
+
+  <button id="start">Start Recording</button>
+  <button id="stop" disabled>Stop</button>
+
+  <div id="status">Idle</div>
+  <div id="transcript">(live transcription)</div>
+
+  <script>
+    const SESSION_ID = "test-session-1";
+    const WS_URL = `ws://localhost:8000/chat/ws/audio/${SESSION_ID}`;
+
+    let ws;
+    let recognition;
+    let finalTranscript = "";
+
+    const startBtn = document.getElementById("start");
+    const stopBtn = document.getElementById("stop");
+    const transcriptEl = document.getElementById("transcript");
+    const statusEl = document.getElementById("status");
+
+    // -------------------------
+    // WebSocket
+    // -------------------------
+    function connectWS() {
+      ws = new WebSocket(WS_URL);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        statusEl.innerText = "WebSocket connected";
+      };
+
+      ws.onmessage = (event) => {
+        // AI audio reply
+        if (event.data instanceof ArrayBuffer) {
+          statusEl.innerText = "Playing AI response";
+
+          const audioBlob = new Blob([event.data], { type: "audio/mp3" });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          audio.play();
+        }
+      };
+
+      ws.onclose = () => {
+        statusEl.innerText = "WebSocket closed";
+      };
+    }
+
+    // -------------------------
+    // Browser Speech Recognition
+    // -------------------------
+    function startSpeechRecognition() {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        transcriptEl.innerText = "Speech recognition not supported";
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        let final = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const text = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            final += text;
+          } else {
+            interim += text;
+          }
+        }
+
+        finalTranscript += final;
+        transcriptEl.innerText = finalTranscript + interim;
+
+        // Send PARTIAL text to backend
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "partial",
+            text: transcriptEl.innerText
+          }));
+        }
+      };
+
+      recognition.start();
+    }
+
+    function stopSpeechRecognition() {
+      if (recognition) {
+        recognition.stop();
+        recognition = null;
+      }
+    }
+
+    // -------------------------
+    // Controls
+    // -------------------------
+    function startRecording() {
+      transcriptEl.innerText = "";
+      finalTranscript = "";
+
+      startSpeechRecognition();
+
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      statusEl.innerText = "Listening...";
+    }
+
+    function stopRecording() {
+      stopSpeechRecognition();
+
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "final",
+          text: transcriptEl.innerText
+        }));
+      }
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      statusEl.innerText = "Thinking...";
+    }
+
+    startBtn.onclick = startRecording;
+    stopBtn.onclick = stopRecording;
+
+    // -------------------------
+    // Init
+    // -------------------------
+    connectWS();
+  </script>
+
+</body>
+</html>
