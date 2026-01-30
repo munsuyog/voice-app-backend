@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, WebSocket, HTTPException
 from starlette.websockets import WebSocketDisconnect
 from utils.context_utils import get_context, save_context, trim_context
 from services.llm_service import generate_response
@@ -7,6 +7,9 @@ import uuid, json, os, asyncio
 from prompts.doctor import DOCTOR_PROMPT
 from services.session_service import create_session
 import re
+from prompts.insights import LEARNING_INSIGHTS_PROMPT
+from prompts.shivaji_maharaj import HISTORY_PROMPT
+from prompts.friend import FRIEND_PROMPT
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -17,6 +20,86 @@ def start_doctor_chat():
         "session_id": session_id,
         "role": "doctor"
     }
+    
+@router.post("/shivaji-maharaj")
+def start_history_chat():
+    session_id = create_session(HISTORY_PROMPT)
+    return {
+        "session_id": session_id,
+        "role": "shivaji-maharaj"
+    }
+    
+@router.post("/friend")
+def start_friend_chat():
+    session_id = create_session(FRIEND_PROMPT)
+    return {
+        "session_id": session_id,
+        "role": "doctor"
+    }
+
+@router.get("/insights/deep/{session_id}")
+async def get_deep_chat_insights(session_id: str):
+    messages = get_context(session_id)
+
+    if not messages or len(messages) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Not enough conversation data for deep analysis"
+        )
+
+    analysis_messages = [
+        {"role": "system", "content": LEARNING_INSIGHTS_PROMPT},
+        {
+            "role": "user",
+            "content": "Conversation:\n" + "\n".join(
+                f"{m['role'].upper()}: {m['content']}"
+                for m in messages
+                if m["role"] in ["user", "assistant"]
+            )
+        }
+    ]
+
+    llm_raw = await asyncio.to_thread(generate_response, analysis_messages)
+
+    # Strong fallback structure
+    fallback = {
+        "overallLevel": "beginner",
+        "confidenceLevel": "low",
+        "communicationReadiness": {
+            "realWorldDoctorVisit": "not_ready",
+            "reason": "Limited sentence clarity"
+        },
+        "skillBreakdown": {
+            "grammar": "weak",
+            "vocabulary": "weak",
+            "fluency": "weak",
+            "pronunciationClarity": "average"
+        },
+        "recurringMistakes": [],
+        "vocabularyGaps": [],
+        "strengths": [],
+        "priorityFocusAreas": [],
+        "practicePlan": {
+            "dailyExercises": [],
+            "rolePlaySuggestions": [],
+            "sentencePatternsToPractice": []
+        },
+        "teacherFeedbackSummary": "Needs guided practice"
+    }
+
+    try:
+        insights = json.loads(llm_raw)
+    except json.JSONDecodeError:
+        print("❌ Deep insights JSON error")
+        clean = re.sub(r'[^\w\s,.:-]', '', llm_raw)
+        fallback["teacherFeedbackSummary"] = clean[:200]
+        insights = fallback
+
+    return {
+        "session_id": session_id,
+        "insights": insights
+    }    
+
 @router.websocket("/ws/audio/{session_id}")
 async def chat_ws_audio(websocket: WebSocket, session_id: str):
     await websocket.accept()

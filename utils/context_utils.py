@@ -13,7 +13,17 @@ def save_context(session_id: str, messages: list):
         json.dumps(messages)
     )
 
-def trim_context(messages: list):
-    system = messages[0]
-    rest = messages[1:]
-    return [system] + rest[-settings.MAX_MESSAGES:]
+def trim_context(messages: list) -> list:
+    if not messages:
+        return messages
+
+    # Keep ALL system messages
+    system_msgs = [m for m in messages if m.get("role") == "system"]
+    chat_msgs = [m for m in messages if m.get("role") != "system"]
+
+    # Only trim if exceeding limit
+    if len(chat_msgs) <= settings.MAX_MESSAGES:
+        return system_msgs + chat_msgs
+
+    return system_msgs + chat_msgs[-settings.MAX_MESSAGES:]
+
