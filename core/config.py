@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4.1-mini"
     OPENAI_API_KEY: str
     REDIS_PASS: str = ""
+    ELEVEN_API:str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

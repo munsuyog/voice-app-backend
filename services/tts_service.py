@@ -5,7 +5,7 @@ from services.openai_service import client
 def text_to_audio(text: str, out_path: str):
     response = client.audio.speech.create(
         model="gpt-4o-mini-tts",
-        voice="shimmer",
+        voice="alloy",
         input=text,
         speed=1
     )
