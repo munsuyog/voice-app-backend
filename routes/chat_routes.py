@@ -12,6 +12,7 @@ from prompts.shivaji_maharaj import HISTORY_PROMPT
 from prompts.friend import FRIEND_PROMPT
 from prompts.geography import INDIA_GEOGRAPHY_PROMPT
 from utils.overpass import overpass_to_geojson
+from prompts.convo import INTRODUCE_YOURSELF_PROMPT
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -37,6 +38,15 @@ def start_friend_chat():
     return {
         "session_id": session_id,
         "role": "doctor"
+    }
+    
+    
+@router.post("/introduce")
+def start_intro_chat():
+    session_id = create_session(INTRODUCE_YOURSELF_PROMPT)
+    return {
+        "session_id": session_id,
+        "role": "teacher"
     }
 
 @router.post("/geography")
